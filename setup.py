@@ -26,7 +26,7 @@ dependencies = [
     "dataclasses; python_version < '3.7'",
     "dramatiq[redis]>=1.6,<2.0",
     "jinja2>=2",
-    "redis>=2.0,<5.0",
+    "redis>=2.0,<7.0",
 ]
 
 extra_dependencies = {}
