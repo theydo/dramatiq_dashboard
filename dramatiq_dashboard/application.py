@@ -1,6 +1,7 @@
 import json
 from pprint import pformat
 from urllib.parse import urlencode
+from dataclasses import asdict
 
 import jinja2
 from dramatiq.common import dq_name, q_name, xq_name
@@ -76,8 +77,8 @@ class DashboardApp(App):
     @handler
     def metrics(self, req):
         data = {
-            "queues": self.iface.queues,
-            "workers": self.iface.workers
+            "queues": [asdict(q) for q in self.iface.queues],
+            "workers": [asdict(w) for w in self.iface.workers],
         }
         return Response(
             content=json.dumps(data),
