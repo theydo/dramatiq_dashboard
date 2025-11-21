@@ -1,3 +1,4 @@
+import json
 from pprint import pformat
 from urllib.parse import urlencode
 
@@ -6,7 +7,7 @@ from dramatiq.common import dq_name, q_name, xq_name
 
 from .csrf import csrf_protect, render_csrf_token
 from .filters import isoformat, short, timeago
-from .http import HTTP_404, HTTP_405, HTTP_410, App, handler, redirect, templated
+from .http import HTTP_404, HTTP_405, HTTP_410, App, Response, handler, redirect, templated
 from .interface import Job, RedisInterface
 
 
@@ -64,6 +65,7 @@ class DashboardApp(App):
         })
 
         self.add_route("/", self.dashboard)
+        self.add_route("/metrics", self.metrics)
         self.add_route("/queues/(?P<name>[^/]+)", self.queue)
         self.add_route("/queues/(?P<name>[^/]+)/(?P<current_tab>(standard|delayed|failed))", self.queue)
         self.add_route("/queues/(?P<name>[^/]+)/(?P<current_tab>(standard|delayed|failed))/(?P<message_id>[^/]+)", self.job)
@@ -71,6 +73,17 @@ class DashboardApp(App):
         self.add_route("/requeue-message", self.requeue_message)
         self.add_route(".*", self.not_found)
 
+    @handler
+    def metrics(self, req):
+        data = {
+            "queues": self.iface.queues,
+            "workers": self.iface.workers
+        }
+        return Response(
+            content=json.dumps(data),
+            headers=[("Content-Type", "application/json")]
+        )
+    
     @handler
     @templated("dashboard.html")
     def dashboard(self, req):
