@@ -81,7 +81,7 @@ class DashboardApp(App):
             "workers": [asdict(w) for w in self.iface.workers],
         }
         return Response(
-            content=json.dumps(data),
+            content=json.dumps(data, default=str),
             headers=[("Content-Type", "application/json")]
         )
     
