@@ -76,9 +76,16 @@ class DashboardApp(App):
 
     @handler
     def metrics(self, req):
+        queues_serialized = [asdict(q) for q in self.iface.queues]
+        workers_serialized = [asdict(w) for w in self.iface.workers]
         data = {
-            "queues": [asdict(q) for q in self.iface.queues],
-            "workers": [asdict(w) for w in self.iface.workers],
+            "global_stats": {
+                "jobs": sum(q["jobs"] for q in queues_serialized),
+                "jobs_delayed": sum(q["jobs_delayed"] for q in queues_serialized),
+                "jobs_dead": sum(q["jobs_dead"] for q in queues_serialized),
+            },
+            "queues": queues_serialized,
+            "workers": workers_serialized,
         }
         return Response(
             content=json.dumps(data, default=str),
