@@ -1,12 +1,14 @@
+import json
 from pprint import pformat
 from urllib.parse import urlencode
+from dataclasses import asdict
 
 import jinja2
 from dramatiq.common import dq_name, q_name, xq_name
 
 from .csrf import csrf_protect, render_csrf_token
 from .filters import isoformat, short, timeago
-from .http import HTTP_404, HTTP_405, HTTP_410, App, handler, redirect, templated
+from .http import HTTP_404, HTTP_405, HTTP_410, App, Response, handler, redirect, templated
 from .interface import Job, RedisInterface
 
 
@@ -64,6 +66,7 @@ class DashboardApp(App):
         })
 
         self.add_route("/", self.dashboard)
+        self.add_route("/metrics", self.metrics)
         self.add_route("/queues/(?P<name>[^/]+)", self.queue)
         self.add_route("/queues/(?P<name>[^/]+)/(?P<current_tab>(standard|delayed|failed))", self.queue)
         self.add_route("/queues/(?P<name>[^/]+)/(?P<current_tab>(standard|delayed|failed))/(?P<message_id>[^/]+)", self.job)
@@ -71,6 +74,24 @@ class DashboardApp(App):
         self.add_route("/requeue-message", self.requeue_message)
         self.add_route(".*", self.not_found)
 
+    @handler
+    def metrics(self, req):
+        queues_serialized = [asdict(q) for q in self.iface.queues]
+        workers_serialized = [asdict(w) for w in self.iface.workers]
+        data = {
+            "global_stats": {
+                "jobs": sum(q["jobs"] for q in queues_serialized),
+                "jobs_delayed": sum(q["jobs_delayed"] for q in queues_serialized),
+                "jobs_dead": sum(q["jobs_dead"] for q in queues_serialized),
+            },
+            "queues": queues_serialized,
+            "workers": workers_serialized,
+        }
+        return Response(
+            content=json.dumps(data, default=str),
+            headers=[("Content-Type", "application/json")]
+        )
+    
     @handler
     @templated("dashboard.html")
     def dashboard(self, req):
