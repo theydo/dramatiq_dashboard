@@ -1,7 +1,5 @@
-import json
 from pprint import pformat
 from urllib.parse import urlencode
-from dataclasses import asdict
 
 import jinja2
 from dramatiq.common import dq_name, q_name, xq_name
@@ -76,20 +74,48 @@ class DashboardApp(App):
 
     @handler
     def metrics(self, req):
-        queues_serialized = [asdict(q) for q in self.iface.queues]
-        workers_serialized = [asdict(w) for w in self.iface.workers]
-        data = {
-            "global_stats": {
-                "jobs": sum(q["jobs"] for q in queues_serialized),
-                "jobs_delayed": sum(q["jobs_delayed"] for q in queues_serialized),
-                "jobs_dead": sum(q["jobs_dead"] for q in queues_serialized),
-            },
-            "queues": queues_serialized,
-            "workers": workers_serialized,
-        }
+        def escape_label_value(value):
+            """Escape label values for Prometheus format."""
+            value = str(value)
+            value = value.replace("\\", "\\\\")
+            value = value.replace("\"", "\\\"")
+            value = value.replace("\n", "\\n")
+            return value
+
+        lines = []
+
+        # Queue metrics
+        lines.append("# HELP dramatiq_queue_jobs Number of jobs in queue")
+        lines.append("# TYPE dramatiq_queue_jobs gauge")
+        for queue in self.iface.queues:
+            lines.append(f'dramatiq_queue_jobs{{queue="{escape_label_value(queue.name)}"}} {queue.jobs}')
+
+        lines.append("# HELP dramatiq_queue_jobs_delayed Number of delayed jobs in queue")
+        lines.append("# TYPE dramatiq_queue_jobs_delayed gauge")
+        for queue in self.iface.queues:
+            lines.append(f'dramatiq_queue_jobs_delayed{{queue="{escape_label_value(queue.name)}"}} {queue.jobs_delayed}')
+
+        lines.append("# HELP dramatiq_queue_jobs_dead Number of dead-lettered jobs in queue")
+        lines.append("# TYPE dramatiq_queue_jobs_dead gauge")
+        for queue in self.iface.queues:
+            lines.append(f'dramatiq_queue_jobs_dead{{queue="{escape_label_value(queue.name)}"}} {queue.jobs_dead}')
+
+        # Worker metrics
+        lines.append("# HELP dramatiq_worker_jobs_in_flight Jobs currently being processed by worker")
+        lines.append("# TYPE dramatiq_worker_jobs_in_flight gauge")
+        for worker in self.iface.workers:
+            lines.append(f'dramatiq_worker_jobs_in_flight{{worker="{escape_label_value(worker.name)}"}} {worker.jobs_in_flight}')
+
+        lines.append("# HELP dramatiq_worker_last_seen_timestamp_seconds Unix timestamp of worker last heartbeat")
+        lines.append("# TYPE dramatiq_worker_last_seen_timestamp_seconds gauge")
+        for worker in self.iface.workers:
+            timestamp = worker.last_seen.timestamp()
+            lines.append(f'dramatiq_worker_last_seen_timestamp_seconds{{worker="{escape_label_value(worker.name)}"}} {timestamp}')
+
+        content = "\n".join(lines) + "\n"
         return Response(
-            content=json.dumps(data, default=str),
-            headers=[("Content-Type", "application/json")]
+            content=content,
+            headers=[("Content-Type", "text/plain; version=1.0.0; charset=utf-8")]
         )
     
     @handler
